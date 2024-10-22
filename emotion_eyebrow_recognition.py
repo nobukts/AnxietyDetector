@@ -7,6 +7,7 @@ import dlib
 from tensorflow.keras.preprocessing.image import img_to_array
 import pandas as pd
 import time
+import imutils
 
 # Cargar el modelo entrenado para la detección de emociones
 model = load_model('models/best.keras')
@@ -44,8 +45,22 @@ def emotion_finder(face_image):
     emotion_prediction = model.predict(face_image)
     return emotion_prediction, emotion_labels[int(np.argmax(emotion_prediction))]
 
-# Capturar video desde la cámara
-video_capture = cv2.VideoCapture(0)
+# Función para normalizar los valores y calcular el nivel de estrés
+def normalize_values(points, disp):
+    normalized_value = abs(disp - np.min(points)) / abs(np.max(points) - np.min(points))
+    stress_value = np.exp(-(normalized_value))
+    if stress_value >= 0.75:
+        return stress_value, "High Stress"
+    else:
+        return stress_value, "Low Stress"
+
+# Capturar video desde un archivo
+video_capture = cv2.VideoCapture('prueba.mp4')
+
+# Verificar si el video se abrió correctamente
+if not video_capture.isOpened():
+    print("Error: No se puede abrir el archivo de video.")
+    exit()
 
 # Inicializar variables para el análisis por segundo
 start_time = time.time()
@@ -53,6 +68,7 @@ frame_count = 0
 emotion_sums = np.zeros(len(emotion_labels))
 data = []
 current_second = 0
+points = []
 
 while True:
     # Leer el cuadro actual del video
@@ -77,6 +93,7 @@ while True:
 
         # Calcular la distancia entre las cejas
         eyebrow_dist = eye_brow_distance(left_eye, right_eye)
+        points.append(int(eyebrow_dist))
 
         # Dibujar el rectángulo del rostro
         (x, y, w, h) = face_utils.rect_to_bb(face)
@@ -95,6 +112,10 @@ while True:
             cv2.putText(frame, f'Emotion: {emotion}', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)
             cv2.putText(frame, f'Eyebrow Dist: {int(eyebrow_dist)}', (x, y + h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
+            # Calcular y mostrar el nivel de estrés
+            stress_value, stress_label = normalize_values(points, eyebrow_dist)
+            cv2.putText(frame, f'Stress Level: {stress_label}', (x, y + h + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
     # Mostrar el cuadro con las anotaciones
     cv2.imshow('Emotion and Eyebrow Detection', frame)
 
@@ -103,7 +124,8 @@ while True:
     if elapsed_time > current_second:
         if frame_count > 0:
             avg_emotions = emotion_sums / frame_count
-            data.append([current_second] + avg_emotions.tolist())
+            stress_value, stress_label = normalize_values(points, eyebrow_dist)
+            data.append([current_second] + avg_emotions.tolist() + [stress_label] + [stress_value])
         # Reiniciar las variables
         current_second = elapsed_time
         frame_count = 0
@@ -113,10 +135,21 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+# Generar un nombre de archivo secuencial
+file_index = 1
+while True:
+    file_name = f'emotion_analysis_{file_index}.xlsx'
+    try:
+        with open(file_name, 'r'):
+            file_index += 1
+    except FileNotFoundError:
+        break
+
 # Guardar los datos en un archivo Excel
-df = pd.DataFrame(data, columns=['Time (s)'] + emotion_labels)
+df = pd.DataFrame(data, columns=['Time (s)'] + emotion_labels + ['Stress Level'] + ['Stress Value'])
 df.to_excel('emotion_analysis.xlsx', index=False)
 
-# Liberar la cámara y cerrar las ventanas
+# Liberar el video y cerrar las ventanas
 video_capture.release()
 cv2.destroyAllWindows()
+
