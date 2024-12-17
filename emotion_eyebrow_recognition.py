@@ -122,7 +122,7 @@ def analisis_video(path, model, emotion_labels, face_detector, predictor):
                 cv2.putText(frame, f'Stress Level: {stress_label}', (x, y + h + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # Mostrar el cuadro con las anotaciones
-        #cv2.imshow('Emotion and Eyebrow Detection', frame)
+        cv2.imshow('Emotion and Eyebrow Detection', frame)
 
         # Cada segundo, calcular el promedio de las probabilidades de las emociones
         elapsed_time = int(time.time() - start_time)
